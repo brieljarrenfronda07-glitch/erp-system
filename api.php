@@ -72,6 +72,7 @@ if($action==='user') {
 }
 $schemas=['owners'=>['name','email','phone','address'],'patients'=>['name','species','breed','owner','sex','birthday','weight','service','status','notes'],'appointments'=>['patient','date','time','service','vet','status','notes'],'consultations'=>['patient','date','vet','diagnosis','treatment','notes'],'vaccinations'=>['patient','vaccine','date','due','notes'],'inventory'=>['name','category','stock','minimum','price','expiry'],'invoices'=>['owner','description','amount','status','date']];
 $schemas['patients']=array_merge($schemas['patients'],['color','temperature','registration_date']);
+$schemas['appointments'][]='services';
 $schemas['consultations']=array_merge($schemas['consultations'],['diet','recheck','license','ptr','s2']);
 $schemas['invoices']=array_merge($schemas['invoices'],['patient','admitted','diagnosis','charges','takehome','initial','prepared','line_items','appointment']);
 $schemas['diagnostics']=['patient','date','tested','kit','lot','results','vet','license','ptr','s2'];
@@ -89,6 +90,12 @@ if($action==='delete') {
 if($action!=='save') respond(['error'=>'Unknown action'],404);
 $data=[];foreach($schemas[$type] as $key) {$v=$input['data'][$key]??'';if(!is_scalar($v)||strlen((string)$v)>10000) respond(['error'=>'Invalid field value.'],422);$data[$key]=trim((string)$v);}
 if($user['role']==='doctor'&&in_array($type,['consultations','diagnostics'],true))$data['vet']=$user['name'];
+if($type==='appointments'&&$data['services']!==''){
+ $selected=json_decode($data['services'],true);
+ if(!is_array($selected)||!array_is_list($selected)||count($selected)<1||count($selected)>20)respond(['error'=>'Choose at least one service for the visit.'],422);
+ foreach($selected as $service)if(!is_string($service)||trim($service)===''||strlen($service)>200||str_contains($service,"\n")||str_contains($service,'|'))respond(['error'=>'Invalid visit service.'],422);
+ $selected=array_values(array_unique(array_map('trim',$selected)));$data['services']=json_encode($selected);$data['service']=implode(', ',$selected);
+}
 $required=['owners'=>['name','phone'],'patients'=>['name','species','owner'],'appointments'=>['patient','date','time','service'],'consultations'=>['patient','date','diagnosis'],'vaccinations'=>['patient','vaccine','date','due'],'inventory'=>['name','stock','minimum','price'],'invoices'=>['owner','description','amount','date']];
 $required['diagnostics']=['patient','date','results'];
 foreach($required[$type] as $key) if($data[$key]==='') respond(['error'=>ucfirst($key).' is required.'],422);

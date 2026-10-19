@@ -7,6 +7,12 @@ openForm=function(type,id=0){
  const descriptions={patients:'Register this pet once. Keep their identity and owner here; select requested services when booking a visit.',appointments:'Choose the requested service for this visit. Completing an appointment tracks attendance; record treatment or vaccination details in the care history.',vaccinations:'Record a vaccine that was administered and its next due date. This is the pet’s clinical vaccine history.',consultations:'Record findings, diagnosis, treatment, and prescription instructions for a consultation.'};
  if(descriptions[type]){const p=document.createElement('p');p.className='workflow-hint';p.textContent=descriptions[type];form.querySelector('.modal-heading').after(p);}
  if(type==='appointments'){
+  const record=state.records.find(r=>r.type==='appointments'&&r.id===id)?.data||{};
+  let chosen=[];try{chosen=JSON.parse(record.services||'[]');}catch{}if(!Array.isArray(chosen)||!chosen.length)chosen=record.service?[record.service]:[];
+  const serviceField=form.elements.service;const group=document.createElement('fieldset');group.className='visit-services';group.innerHTML=`<legend>Requested services <span class="required">*</span></legend><p>Select all services for this visit. Billing will carry these choices forward.</p>${[...new Set([...services,...chosen])].map(service=>`<label><input type="checkbox" value="${esc(service)}" ${chosen.includes(service)?'checked':''}> ${esc(service)}</label>`).join('')}`;
+  serviceField.parentElement.replaceWith(group);
+  const summary=document.createElement('input');summary.type='hidden';summary.name='service';form.append(summary);const selected=document.createElement('input');selected.type='hidden';selected.name='services';form.append(selected);
+  const syncServices=()=>{const list=Array.from(group.querySelectorAll('input:checked')).map(input=>input.value);summary.value=list.join(', ');selected.value=JSON.stringify(list);const first=group.querySelector('input');if(first)first.setCustomValidity(list.length?'':'Select at least one service.');};group.onchange=syncServices;syncServices();
   const saveAndBill=document.createElement('button');saveAndBill.className='primary';saveAndBill.type='submit';saveAndBill.textContent='Save & continue to billing';form.querySelector('.modal-foot').append(saveAndBill);
   const originalSubmit=form.onsubmit;
   form.onsubmit=async event=>{
@@ -25,6 +31,10 @@ patientHistory=function(id){
 };
 function startPatientCare(type,id){
  const pet=state.records.find(r=>r.type==='patients'&&r.id===id);if(!pet)return;
+ if(type==='invoices'){
+  const visit=rows('appointments').filter(r=>r.data.patient==id&&r.data.status!=='Cancelled'&&!rows('invoices').some(invoice=>invoice.data.appointment==r.id)).sort((a,b)=>(b.data.date+' '+b.data.time).localeCompare(a.data.date+' '+a.data.time))[0];
+  if(visit){billVisit(visit.id);return;}
+ }
  $('#modal').close();openForm(type);
  const form=document.querySelector(type==='invoices'?'#invoice-form':'#record-form');if(!form)return;
  if(type==='invoices'&&form.elements.owner){form.elements.owner.value=String(pet.data.owner);form.elements.owner.dispatchEvent(new Event('change'));}
@@ -34,7 +44,8 @@ function visitBillDraft(id){
  const visit=state.records.find(r=>r.type==='appointments'&&r.id===id);if(!visit)throw Error('Visit not found.');
  if(visit.data.status==='Cancelled')throw Error('Cancelled visits cannot be billed.');
  const pet=state.records.find(r=>r.type==='patients'&&r.id==visit.data.patient);if(!pet)throw Error('Patient not found.');
- return {appointment:String(id),owner:String(pet.data.owner),patient:String(pet.id),date:today(),description:visit.data.service,line_items:JSON.stringify([{service:visit.data.service,quantity:1,price:0}]),initial:'0',takehome:'0'};
+ let selected=[];try{selected=JSON.parse(visit.data.services||'[]');}catch{}if(!Array.isArray(selected)||!selected.length)selected=[visit.data.service];
+ return {appointment:String(id),owner:String(pet.data.owner),patient:String(pet.id),date:today(),description:selected.join(', '),line_items:JSON.stringify(selected.map(service=>({service,quantity:1,price:''}))),initial:'0',takehome:'0'};
 }
 function billVisit(id){
  const existing=rows('invoices').find(r=>r.data.appointment==id);

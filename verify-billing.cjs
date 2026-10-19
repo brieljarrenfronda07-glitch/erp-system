@@ -14,7 +14,9 @@ for(const text of ['Owner Name','Pet Name','Consultation','Deworming','₱850.50
 assert.ok(!dialog.innerHTML.includes('blank-charge'),'Only actual services printed');
 vm.runInContext(`state.records.push({id:4,type:'appointments',data:{patient:'2',service:'Vaccination',status:'Completed'}});`,ctx);
 const draft=vm.runInContext('visitBillDraft(4)',ctx);
-assert.equal(draft.owner,'1');assert.equal(draft.patient,'2');assert.equal(draft.appointment,'4');assert.equal(JSON.parse(draft.line_items)[0].service,'Vaccination');assert.equal(JSON.parse(draft.line_items)[0].price,0);
+assert.equal(draft.owner,'1');assert.equal(draft.patient,'2');assert.equal(draft.appointment,'4');assert.equal(JSON.parse(draft.line_items)[0].service,'Vaccination');assert.equal(JSON.parse(draft.line_items)[0].price,'');
+vm.runInContext(`state.records.find(r=>r.id===4).data.services=JSON.stringify(['Consultation','Vaccination','Deworming'])`,ctx);
+const multiple=vm.runInContext('visitBillDraft(4)',ctx);assert.deepEqual(JSON.parse(multiple.line_items).map(item=>item.service),['Consultation','Vaccination','Deworming']);assert.ok(JSON.parse(multiple.line_items).every(item=>item.price===''));
 vm.runInContext(`state.records.find(r=>r.id===4).data.status='Cancelled'`,ctx);
 assert.throws(()=>vm.runInContext('visitBillDraft(4)',ctx),/Cancelled/);
 assert.throws(()=>vm.runInContext('visitBillDraft(999)',ctx),/not found/);
