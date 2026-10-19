@@ -84,12 +84,11 @@ if($action==='delete') {
 }
 if($action!=='save') respond(['error'=>'Unknown action'],404);
 $data=[];foreach($schemas[$type] as $key) {$v=$input['data'][$key]??'';if(!is_scalar($v)||strlen((string)$v)>10000) respond(['error'=>'Invalid field value.'],422);$data[$key]=trim((string)$v);}
-$required=['owners'=>['name','phone'],'patients'=>['name','species','owner','service'],'appointments'=>['patient','date','time','service'],'consultations'=>['patient','date','diagnosis'],'vaccinations'=>['patient','vaccine','date','due'],'inventory'=>['name','stock','minimum','price'],'invoices'=>['owner','description','amount','date']];
+$required=['owners'=>['name','phone'],'patients'=>['name','species','owner'],'appointments'=>['patient','date','time','service'],'consultations'=>['patient','date','diagnosis'],'vaccinations'=>['patient','vaccine','date','due'],'inventory'=>['name','stock','minimum','price'],'invoices'=>['owner','description','amount','date']];
 $required['diagnostics']=['patient','date','results'];
 foreach($required[$type] as $key) if($data[$key]==='') respond(['error'=>ucfirst($key).' is required.'],422);
 if($type==='patients') {
- if(!in_array($data['service'],['Consultation','Grooming','Deworming','Surgery','Vaccination','Confinement/Admission'],true)) respond(['error'=>'Select a valid service.'],422);
- if($id) {$q=$db->prepare('SELECT data FROM records WHERE id=? AND type=?');$q->execute([$id,$type]);$previous=json_decode($q->fetchColumn()?:'{}',true);$data['status']=$previous['status']??'';}
+ if($id) {$q=$db->prepare('SELECT data FROM records WHERE id=? AND type=?');$q->execute([$id,$type]);$previous=json_decode($q->fetchColumn()?:'{}',true);$data['status']=$previous['status']??'';$data['service']=$previous['service']??'';}
 }
 foreach(['stock','minimum','price','amount','weight','initial','takehome'] as $key) if(isset($data[$key])&&$data[$key]!==''&&(!is_numeric($data[$key])||(float)$data[$key]<0)) respond(['error'=>ucfirst($key).' must be a positive number.'],422);
 foreach(['owner'=>'owners','patient'=>'patients'] as $key=>$target) if(isset($data[$key])&&$data[$key]!=='') {$q=$db->prepare('SELECT COUNT(*) FROM records WHERE id=? AND type=?');$q->execute([$data[$key],$target]);if(!$q->fetchColumn()) respond(['error'=>'Select an existing '.$key.'.'],422);}

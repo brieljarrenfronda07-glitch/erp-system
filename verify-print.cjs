@@ -12,7 +12,7 @@ vm.runInContext(`state={records:[
  {id:4,type:'diagnostics',data:{patient:'2',results:'Test A | Positive\\nTest B | Negative'}},
  {id:5,type:'invoices',data:{patient:'2',owner:'1',charges:'Consultation | 500\\nMedicine | 100',takehome:'50',initial:'200'}}
 ]};`,context);
-for(const [type,id,expected] of [['patients',2,'☑ Grooming'],['consultations',3,'Medicine instructions'],['diagnostics',4,'positive'],['invoices',5,'₱450.00']]){
+for(const [type,id,expected] of [['patients',2,'Patient Information'],['consultations',3,'Medicine instructions'],['diagnostics',4,'positive'],['invoices',5,'₱450.00']]){
  vm.runInContext(`printRecord('${type}',${id})`,context);
  assert.ok(dialog.innerHTML.includes(expected),type+' expected content');
  assert.ok(!dialog.innerHTML.includes('Owner <script>'),type+' escapes patient data');
