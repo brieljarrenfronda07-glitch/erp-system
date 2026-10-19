@@ -17,7 +17,7 @@ if (!$db->query('SELECT COUNT(*) FROM users')->fetchColumn()) {
  $db->exec('BEGIN IMMEDIATE');
  if (!$db->query('SELECT COUNT(*) FROM users')->fetchColumn()) {
  $q=$db->prepare('INSERT INTO users(name,email,password,role) VALUES(?,?,?,?)');
- $adminEmail=$production?(getenv('ADMIN_EMAIL')?:''):'admin@pawcare.local';
+ $adminEmail=$production?strtolower(trim(getenv('ADMIN_EMAIL')?:'')):'admin@pawcare.local';
  $adminPassword=$production?(getenv('ADMIN_PASSWORD')?:''):'Admin123!';
  if(!filter_var($adminEmail,FILTER_VALIDATE_EMAIL)||($production&&strlen($adminPassword)<12)) { $db->exec('ROLLBACK');respond(['error'=>'Configure ADMIN_EMAIL and ADMIN_PASSWORD (at least 12 characters) before first deployment.'],503); }
  $q->execute([getenv('ADMIN_NAME')?:'Clinic Administrator',$adminEmail,password_hash($adminPassword,PASSWORD_DEFAULT),'admin']);
@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && !in_array($action,['login'],true) && 
 if($action==='login') {
  if($_SERVER['REQUEST_METHOD']!=='POST') respond(['error'=>'Method not allowed'],405);
  if(($_SESSION['attempts']??0)>=10 && time()-($_SESSION['attempt_time']??0)<300) respond(['error'=>'Too many attempts. Please wait five minutes.'],429);
- $q=$db->prepare('SELECT * FROM users WHERE email=?');$q->execute([strtolower(trim($input['email']??''))]);$u=$q->fetch(PDO::FETCH_ASSOC);
+ $q=$db->prepare('SELECT * FROM users WHERE lower(email)=?');$q->execute([strtolower(trim($input['email']??''))]);$u=$q->fetch(PDO::FETCH_ASSOC);
  if(!$u || !password_verify($input['password']??'',$u['password'])) {$_SESSION['attempts']=($_SESSION['attempts']??0)+1;$_SESSION['attempt_time']=time();respond(['error'=>'Incorrect email or password.'],401);}
  session_regenerate_id(true);$_SESSION['uid']=$u['id'];$_SESSION['attempts']=0;$_SESSION['csrf']=bin2hex(random_bytes(24));respond(['ok'=>true]);
 }
@@ -82,3 +82,4 @@ if($type==='invoices' && $data['charges']!=='') {
 }
 if($id){$q=$db->prepare('UPDATE records SET data=? WHERE id=? AND type=?');$q->execute([json_encode($data),$id,$type]);}else{$q=$db->prepare('INSERT INTO records(type,data) VALUES(?,?)');$q->execute([$type,json_encode($data)]);}respond(['ok'=>true]);
 } catch(PDOException $e){respond(['error'=>str_contains($e->getMessage(),'UNIQUE')?'That email is already registered.':'Database operation failed.'],409);}catch(Throwable $e){respond(['error'=>'Unable to process this request.'],500);}
+
