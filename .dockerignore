@@ -13,4 +13,5 @@ verify-deploy.php
 verify-activity.php
 verify-billing.cjs
 verify-doctor.cjs
+verify-prescriptions.cjs
 render-*.png

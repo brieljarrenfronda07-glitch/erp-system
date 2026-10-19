@@ -1,0 +1,12 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const ctx=vm.createContext({document:{querySelector(){return null;}},console});
+vm.runInContext(fs.readFileSync('app.js','utf8').replace(/boot\(\);\s*$/,''),ctx);
+for(const f of ['printing.js','permissions.js','activity.js','billing.js','workflow.js','doctor.js','prescriptions.js'])vm.runInContext(fs.readFileSync(f,'utf8'),ctx);
+vm.runInContext(`state={user:{role:'staff'},records:[{id:1,type:'owners',data:{name:'Owner'}},{id:2,type:'patients',data:{name:'Pet',owner:'1'}},{id:3,type:'appointments',data:{patient:'2',service:'Consultation',status:'Completed'}},{id:4,type:'consultations',data:{patient:'2',appointment:'3',diagnosis:'Recorded diagnosis',medicines:JSON.stringify([{name:'Prescribed medicine',quantity:10,instructions:'Doctor directions'},{name:'Second medicine',quantity:2,instructions:'Other directions'}])}}]};`,ctx);
+const draft=vm.runInContext('prescriptionDraft(4)',ctx),items=JSON.parse(draft.line_items);
+assert.equal(draft.owner,'1');assert.equal(draft.patient,'2');assert.equal(draft.appointment,'3');assert.equal(items.length,3);assert.equal(items[1].quantity,10);assert.equal(items[1].service,'Medicine: Prescribed medicine');assert.ok(items.every(item=>item.price===''));assert.deepEqual(JSON.parse(draft.prescriptions),[4]);
+const visit=vm.runInContext('visitBillDraft(3)',ctx);assert.equal(JSON.parse(visit.line_items).length,3);
+vm.runInContext(`state.records.push({id:5,type:'invoices',data:{patient:'2',prescriptions:'[4]'}})`,ctx);
+assert.equal(vm.runInContext('prescriptionInvoice(4).id',ctx),5);assert.equal(JSON.parse(vm.runInContext('visitBillDraft(3).line_items',ctx)).length,1);
+assert.throws(()=>vm.runInContext('prescriptionDraft(99)',ctx),/not found/);
+console.log('Passed: prescribed medicine quantities, owner/pet/visit links, automatic visit import, explicit prices, no duplicate medicine rows, billed-source detection.');

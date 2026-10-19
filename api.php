@@ -16,6 +16,7 @@ $db=new PDO('sqlite:'.$dataDir.'/clinic.sqlite');
 $db->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
 $db->exec('PRAGMA busy_timeout=5000');
 $db->exec('PRAGMA foreign_keys=ON');
+$db->exec('CREATE TABLE IF NOT EXISTS prescription_invoices (consultation_id INTEGER PRIMARY KEY REFERENCES records(id) ON DELETE RESTRICT, invoice_id INTEGER NOT NULL REFERENCES records(id) ON DELETE CASCADE)');
 $db->exec('CREATE TABLE IF NOT EXISTS invoice_visits (appointment_id INTEGER PRIMARY KEY REFERENCES records(id) ON DELETE RESTRICT, invoice_id INTEGER UNIQUE NOT NULL REFERENCES records(id) ON DELETE CASCADE)');
 $db->exec('CREATE TABLE IF NOT EXISTS activity_logs (id INTEGER PRIMARY KEY, actor_id INTEGER, actor_name TEXT NOT NULL, actor_role TEXT NOT NULL, event TEXT NOT NULL, entity TEXT NOT NULL, record_id INTEGER, details TEXT NOT NULL, occurred_at TEXT NOT NULL); CREATE INDEX IF NOT EXISTS activity_time ON activity_logs(occurred_at)');
 $db->exec('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL); CREATE TABLE IF NOT EXISTS records (id INTEGER PRIMARY KEY, type TEXT NOT NULL, data TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)');
@@ -74,7 +75,9 @@ $schemas=['owners'=>['name','email','phone','address'],'patients'=>['name','spec
 $schemas['patients']=array_merge($schemas['patients'],['color','temperature','registration_date']);
 $schemas['appointments'][]='services';
 $schemas['consultations']=array_merge($schemas['consultations'],['diet','recheck','license','ptr','s2']);
+$schemas['consultations']=array_merge($schemas['consultations'],['medicines','appointment']);
 $schemas['invoices']=array_merge($schemas['invoices'],['patient','admitted','diagnosis','charges','takehome','initial','prepared','line_items','appointment']);
+$schemas['invoices'][]='prescriptions';
 $schemas['diagnostics']=['patient','date','tested','kit','lot','results','vet','license','ptr','s2'];
 $type=$input['type']??'';if(!isset($schemas[$type])) respond(['error'=>'Invalid record type.'],422);
 if($user['role']==='doctor'&&(!in_array($type,['patients','appointments','consultations','vaccinations','diagnostics'],true)||($type==='patients'&&empty($input['id']))))respond(['error'=>'Doctor access is limited to patient updates, appointments, and clinical care records.'],403);
@@ -83,6 +86,7 @@ $id=(int)($input['id']??0);
 if($id){$q=$db->prepare('SELECT COUNT(*) FROM records WHERE id=? AND type=?');$q->execute([$id,$type]);if(!$q->fetchColumn())respond(['error'=>'Record not found.'],404);}
 if($action==='delete') {
  if($user['role']!=='admin') respond(['error'=>'Only administrators can delete records.'],403);
+ if($type==='consultations'){$q=$db->prepare('SELECT COUNT(*) FROM prescription_invoices WHERE consultation_id=?');$q->execute([$id]);if($q->fetchColumn())respond(['error'=>'This prescription is linked to an invoice. Remove the invoice first.'],409);}
  if($type==='appointments'){$q=$db->prepare('SELECT COUNT(*) FROM invoice_visits WHERE appointment_id=?');$q->execute([$id]);if($q->fetchColumn())respond(['error'=>'This visit has an invoice. Remove the invoice first.'],409);}
  foreach($db->query('SELECT type,data FROM records') as $r){$d=json_decode($r['data'],true);if(($type==='owners' && in_array($r['type'],['patients','invoices']) && ($d['owner']??'')==(string)$id)||($type==='patients' && in_array($r['type'],['appointments','consultations','vaccinations','diagnostics','invoices'])&&($d['patient']??'')==(string)$id)) respond(['error'=>'This record is linked to other records. Remove those first.'],409);}
  $db->beginTransaction();$q=$db->prepare('DELETE FROM records WHERE id=? AND type=?');$q->execute([$id,$type]);activity($db,$user,'Deleted',$type,$id,'Deleted record #'.$id);$db->commit();respond(['ok'=>true]);
@@ -90,6 +94,18 @@ if($action==='delete') {
 if($action!=='save') respond(['error'=>'Unknown action'],404);
 $data=[];foreach($schemas[$type] as $key) {$v=$input['data'][$key]??'';if(!is_scalar($v)||strlen((string)$v)>10000) respond(['error'=>'Invalid field value.'],422);$data[$key]=trim((string)$v);}
 if($user['role']==='doctor'&&in_array($type,['consultations','diagnostics'],true))$data['vet']=$user['name'];
+if($type==='consultations'){
+ $previous=[];if($id){$q=$db->prepare('SELECT data FROM records WHERE id=?');$q->execute([$id]);$previous=json_decode($q->fetchColumn()?:'{}',true);}
+ if($user['role']==='staff'){
+  if($data['medicines']!==''&&$data['medicines']!==($previous['medicines']??'')&&$data['medicines']!=='[]')respond(['error'=>'Only doctors and administrators can prescribe medicines.'],403);
+  $data['medicines']=$previous['medicines']??'';
+ }
+ if($data['medicines']!==''){
+  $medicines=json_decode($data['medicines'],true);if(!is_array($medicines)||!array_is_list($medicines)||count($medicines)>50)respond(['error'=>'Invalid medicine list.'],422);
+  foreach($medicines as $medicine){if(!is_array($medicine)||!is_string($medicine['name']??null)||trim($medicine['name'])===''||strlen($medicine['name'])>180||str_contains($medicine['name'],'|')||preg_match('/[\r\n]/',$medicine['name'])||!is_numeric($medicine['quantity']??null)||(float)$medicine['quantity']!==(float)(int)$medicine['quantity']||(int)$medicine['quantity']<1||(int)$medicine['quantity']>10000||!is_string($medicine['instructions']??null)||strlen($medicine['instructions'])>2000)respond(['error'=>'Each medicine requires a name, whole quantity, and valid instructions.'],422);}
+ }
+ if($data['appointment']!==''){$q=$db->prepare('SELECT data FROM records WHERE id=? AND type=?');$q->execute([$data['appointment'],'appointments']);$visit=json_decode($q->fetchColumn()?:'null',true);if(!$visit||($visit['patient']??'')!==$data['patient'])respond(['error'=>'Select a visit belonging to this patient.'],422);}
+}
 if($type==='appointments'&&$data['services']!==''){
  $selected=json_decode($data['services'],true);
  if(!is_array($selected)||!array_is_list($selected)||count($selected)<1||count($selected)>20)respond(['error'=>'Choose at least one service for the visit.'],422);
@@ -110,6 +126,13 @@ if($type==='invoices' && $data['appointment']!==''){
  if(!$visit||($visit['patient']??'')!==$data['patient'])respond(['error'=>'The invoice must use the patient from the linked visit.'],422);
  if(($visit['status']??'')==='Cancelled')respond(['error'=>'Cancelled visits cannot be billed.'],422);
  $q=$db->prepare('SELECT invoice_id FROM invoice_visits WHERE appointment_id=?');$q->execute([$data['appointment']]);$existingInvoice=$q->fetchColumn();if($existingInvoice&&(int)$existingInvoice!==$id)respond(['error'=>'This visit already has an invoice. Open its existing bill.'],409);
+}
+if($type==='invoices'){
+ $prescriptions=$data['prescriptions']===''?[]:json_decode($data['prescriptions'],true);
+ if(!is_array($prescriptions)||!array_is_list($prescriptions)||count($prescriptions)>100)respond(['error'=>'Invalid prescription references.'],422);
+ $prescriptions=array_values(array_unique(array_map('intval',$prescriptions)));
+ foreach($prescriptions as $prescription){$q=$db->prepare('SELECT data FROM records WHERE id=? AND type=?');$q->execute([$prescription,'consultations']);$clinical=json_decode($q->fetchColumn()?:'null',true);if(!$clinical||($clinical['patient']??'')!==$data['patient'])respond(['error'=>'Prescriptions must belong to the billed pet.'],422);$q=$db->prepare('SELECT invoice_id FROM prescription_invoices WHERE consultation_id=?');$q->execute([$prescription]);$existing=$q->fetchColumn();if($existing&&(int)$existing!==$id)respond(['error'=>'This prescription is already linked to another invoice. Open that invoice.'],409);}
+ $data['prescriptions']=json_encode($prescriptions);
 }
 if($type==='invoices' && $data['charges']!=='') {
  $total=0;foreach(preg_split('/\R/',$data['charges']) as $line){if(trim($line)==='')continue;$parts=explode('|',$line);$charge=trim(array_pop($parts));if(!$parts||!is_numeric($charge)||(float)$charge<0) respond(['error'=>'Use one charge per line: Description | Amount.'],422);$total+=(float)$charge;}
@@ -132,5 +155,5 @@ if($type==='invoices' && $data['line_items']!=='') {
  $data['amount']=number_format($total/100,2,'.','');$data['initial']=number_format($payment/100,2,'.','');$data['line_items']=json_encode($normalized);$data['charges']=implode("\n",$lines);$data['description']=implode(', ',array_column($normalized,'service'));$data['status']=$payment>=$total?'Paid':($payment>0?'Partially paid':'Unpaid');
 }
 $db->beginTransaction();$event=$id?'Updated':'Created';
-if($id){$q=$db->prepare('UPDATE records SET data=? WHERE id=? AND type=?');$q->execute([json_encode($data),$id,$type]);}else{$q=$db->prepare('INSERT INTO records(type,data) VALUES(?,?)');$q->execute([$type,json_encode($data)]);$id=(int)$db->lastInsertId();}if($type==='invoices'){$q=$db->prepare('DELETE FROM invoice_visits WHERE invoice_id=?');$q->execute([$id]);if($data['appointment']!==''){$q=$db->prepare('INSERT INTO invoice_visits(appointment_id,invoice_id) VALUES(?,?)');$q->execute([$data['appointment'],$id]);}}activity($db,$user,$event,$type,$id,$event.' record #'.$id);$db->commit();respond(['ok'=>true]);
+if($id){$q=$db->prepare('UPDATE records SET data=? WHERE id=? AND type=?');$q->execute([json_encode($data),$id,$type]);}else{$q=$db->prepare('INSERT INTO records(type,data) VALUES(?,?)');$q->execute([$type,json_encode($data)]);$id=(int)$db->lastInsertId();}if($type==='invoices'){$q=$db->prepare('DELETE FROM invoice_visits WHERE invoice_id=?');$q->execute([$id]);if($data['appointment']!==''){$q=$db->prepare('INSERT INTO invoice_visits(appointment_id,invoice_id) VALUES(?,?)');$q->execute([$data['appointment'],$id]);}}if($type==='invoices'){$q=$db->prepare('DELETE FROM prescription_invoices WHERE invoice_id=?');$q->execute([$id]);foreach($prescriptions as $prescription){$q=$db->prepare('INSERT INTO prescription_invoices(consultation_id,invoice_id) VALUES(?,?)');$q->execute([$prescription,$id]);}}activity($db,$user,$event,$type,$id,$event.' record #'.$id);$db->commit();respond(['ok'=>true]);
 } catch(PDOException $e){respond(['error'=>str_contains($e->getMessage(),'UNIQUE')?'That email is already registered.':'Database operation failed.'],409);}catch(Throwable $e){respond(['error'=>'Unable to process this request.'],500);}
