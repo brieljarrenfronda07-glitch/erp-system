@@ -1,0 +1,5 @@
+/data/*.sqlite*
+.env
+.env.*
+*.zip
+*.log

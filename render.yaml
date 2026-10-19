@@ -1,0 +1,23 @@
+# Paid service and disk: review cost in Render before confirming deployment.
+services:
+  - type: web
+    name: petcare-clinic
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health.php
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATA_DIR
+        value: /var/data
+      - key: ADMIN_NAME
+        value: Clinic Administrator
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+    disk:
+      name: petcare-data
+      mountPath: /var/data
+      sizeGB: 1

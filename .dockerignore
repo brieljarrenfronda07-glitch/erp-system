@@ -1,0 +1,12 @@
+.git
+.agents
+.codex
+.env
+.env.*
+data
+*.zip
+*.log
+README.md
+RENDER.md
+verify-print.cjs
+verify-deploy.php
