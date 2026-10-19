@@ -61,12 +61,13 @@ if($action==='logs') {
 }
 if($action==='bootstrap') {
  $records=$db->query('SELECT * FROM records ORDER BY id DESC')->fetchAll(PDO::FETCH_ASSOC);foreach($records as &$r) {$r['data']=json_decode($r['data'],true);if($user['role']!=='admin'&&$r['type']==='inventory')unset($r['data']['price']);}unset($r);
+ if($user['role']==='doctor')$records=array_values(array_filter($records,fn($r)=>$r['type']!=='invoices'));
  respond(['user'=>$user,'csrf'=>$_SESSION['csrf'],'records'=>$records,'users'=>$user['role']==='admin'?$db->query('SELECT id,name,email,role FROM users')->fetchAll(PDO::FETCH_ASSOC):[]]);
 }
 if($_SERVER['REQUEST_METHOD']!=='POST') respond(['error'=>'Method not allowed'],405);
 if($action==='user') {
  if($user['role']!=='admin') respond(['error'=>'Administrator access required.'],403);
- if(!filter_var($input['email']??'',FILTER_VALIDATE_EMAIL)||strlen($input['password']??'')<8||!trim($input['name']??'')||!in_array($input['role']??'',['admin','staff'])) respond(['error'=>'Enter a name, valid email, role, and password of at least 8 characters.'],422);
+ if(!filter_var($input['email']??'',FILTER_VALIDATE_EMAIL)||strlen($input['password']??'')<8||!trim($input['name']??'')||!in_array($input['role']??'',['admin','staff','doctor'])) respond(['error'=>'Enter a name, valid email, role, and password of at least 8 characters.'],422);
  $db->beginTransaction();$q=$db->prepare('INSERT INTO users(name,email,password,role) VALUES(?,?,?,?)');$q->execute([trim($input['name']),strtolower(trim($input['email'])),password_hash($input['password'],PASSWORD_DEFAULT),$input['role']]);activity($db,$user,'Account created','users',(int)$db->lastInsertId(),'Created '.$input['role'].' account');$db->commit();respond(['ok'=>true]);
 }
 $schemas=['owners'=>['name','email','phone','address'],'patients'=>['name','species','breed','owner','sex','birthday','weight','service','status','notes'],'appointments'=>['patient','date','time','service','vet','status','notes'],'consultations'=>['patient','date','vet','diagnosis','treatment','notes'],'vaccinations'=>['patient','vaccine','date','due','notes'],'inventory'=>['name','category','stock','minimum','price','expiry'],'invoices'=>['owner','description','amount','status','date']];
@@ -75,6 +76,7 @@ $schemas['consultations']=array_merge($schemas['consultations'],['diet','recheck
 $schemas['invoices']=array_merge($schemas['invoices'],['patient','admitted','diagnosis','charges','takehome','initial','prepared','line_items','appointment']);
 $schemas['diagnostics']=['patient','date','tested','kit','lot','results','vet','license','ptr','s2'];
 $type=$input['type']??'';if(!isset($schemas[$type])) respond(['error'=>'Invalid record type.'],422);
+if($user['role']==='doctor'&&(!in_array($type,['patients','appointments','consultations','vaccinations','diagnostics'],true)||($type==='patients'&&empty($input['id']))))respond(['error'=>'Doctor access is limited to patient updates, appointments, and clinical care records.'],403);
 if($type==='inventory'&&$user['role']!=='admin') respond(['error'=>'Only administrators can change inventory. Staff can view stock availability.'],403);
 $id=(int)($input['id']??0);
 if($id){$q=$db->prepare('SELECT COUNT(*) FROM records WHERE id=? AND type=?');$q->execute([$id,$type]);if(!$q->fetchColumn())respond(['error'=>'Record not found.'],404);}
@@ -86,6 +88,7 @@ if($action==='delete') {
 }
 if($action!=='save') respond(['error'=>'Unknown action'],404);
 $data=[];foreach($schemas[$type] as $key) {$v=$input['data'][$key]??'';if(!is_scalar($v)||strlen((string)$v)>10000) respond(['error'=>'Invalid field value.'],422);$data[$key]=trim((string)$v);}
+if($user['role']==='doctor'&&in_array($type,['consultations','diagnostics'],true))$data['vet']=$user['name'];
 $required=['owners'=>['name','phone'],'patients'=>['name','species','owner'],'appointments'=>['patient','date','time','service'],'consultations'=>['patient','date','diagnosis'],'vaccinations'=>['patient','vaccine','date','due'],'inventory'=>['name','stock','minimum','price'],'invoices'=>['owner','description','amount','date']];
 $required['diagnostics']=['patient','date','results'];
 foreach($required[$type] as $key) if($data[$key]==='') respond(['error'=>ucfirst($key).' is required.'],422);

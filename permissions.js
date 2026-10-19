@@ -14,7 +14,7 @@ render=function(){
    if(revenue){const count=rows('appointments').filter(r=>r.data.date===today()&&r.data.status!=='Completed'&&r.data.status!=='Cancelled').length;revenue.innerHTML=`<div>Visits to complete<span class="stat-icon peach">▦</span></div><strong>${count}</strong><small>Today’s remaining appointments<span>↗</span></small>`;revenue.onclick=()=>navigate('appointments');}
   }
  }else if(page==='users'){
-  const button=document.querySelector('.page-heading .primary');if(button)button.textContent='＋ Create staff account';
+  const button=document.querySelector('.page-heading .primary');if(button)button.textContent='＋ Create team account';
  }
 };
 const roleDrawTable=drawTable;
@@ -29,7 +29,7 @@ openForm=function(type,id=0){
  if(type==='users'){
   const select=document.querySelector('#record-form [name=role]');if(select)select.value='staff';
   const title=document.querySelector('.modal-heading h2');if(title)title.textContent='Create team account';
-  const note=document.createElement('p');note.textContent='Staff handle daily clinic operations. Administrators also manage accounts, inventory, exports, and record deletion.';document.querySelector('#record-form .modal-heading')?.after(note);
+  const note=document.createElement('p');note.textContent='Staff handle registration and billing. Doctors handle clinical care. Administrators manage the full clinic and all account types.';document.querySelector('#record-form .modal-heading')?.after(note);
  }
 };
 const roleExport=exportCSV;

@@ -6,6 +6,7 @@ $db->exec('CREATE TABLE users(id INTEGER PRIMARY KEY,name TEXT,email TEXT,passwo
 $q=$db->prepare('INSERT INTO users VALUES(?,?,?,?,?)');
 $q->execute([1,'Admin','admin@example.com',password_hash('Test-only-password',PASSWORD_DEFAULT),'admin']);
 $q->execute([2,'Staff','staff@example.com',password_hash('Test-only-password',PASSWORD_DEFAULT),'staff']);
+$q->execute([3,'Doctor','doctor@example.com',password_hash('Test-only-password',PASSWORD_DEFAULT),'doctor']);
 function requestAudit(string $dir,int $uid,array $query): array {
  $code='putenv('.var_export('DATA_DIR='.$dir,true).');ini_set("session.save_path",'.var_export($dir,true).');session_start();$_SESSION["uid"]='.$uid.';$_SESSION["csrf"]="test";session_write_close();$_GET='.var_export($query,true).';$_SERVER["REQUEST_METHOD"]="GET";require '.var_export(__DIR__.'/api.php',true).';';
  $p=proc_open([PHP_BINARY,'-r',$code],[1=>['pipe','w'],2=>['pipe','w']],$pipes);$output=stream_get_contents($pipes[1]);$errors=stream_get_contents($pipes[2]);fclose($pipes[1]);fclose($pipes[2]);$exit=proc_close($p);
@@ -22,6 +23,9 @@ try{
  $staff=requestAudit($dir,2,['action'=>'logs']);checkAudit(isset($staff['error'])&&!isset($staff['logs']),'Staff denied');
  $guest=requestAudit($dir,999,['action'=>'logs']);checkAudit(isset($guest['error'])&&!isset($guest['logs']),'Invalid session denied');
  $bootstrap=requestAudit($dir,2,['action'=>'bootstrap']);checkAudit(!isset($bootstrap['logs'])&&$bootstrap['users']===[],'Staff bootstrap excludes audit log and accounts');
+ $q=$db->prepare('INSERT INTO records(type,data) VALUES(?,?)');$q->execute(['invoices',json_encode(['amount'=>'999'])]);$q->execute(['inventory',json_encode(['name'=>'Medicine','price'=>'100','stock'=>'5'])]);
+ $doctor=requestAudit($dir,3,['action'=>'bootstrap']);checkAudit($doctor['user']['role']==='doctor'&&$doctor['users']===[],'Doctor session recognized');
+ foreach($doctor['records'] as $record){checkAudit($record['type']!=='invoices','Doctor cannot receive invoices');if($record['type']==='inventory')checkAudit(!isset($record['data']['price']),'Doctor cannot receive inventory prices');}
+ $doctorLogs=requestAudit($dir,3,['action'=>'logs']);checkAudit(isset($doctorLogs['error'])&&!isset($doctorLogs['logs']),'Doctor cannot retrieve activity logs');
  echo "Passed: admin log access, staff and invalid-session denial, search, action filters, newest-first order, pagination, bootstrap privacy.\n";
 }finally{$q=null;$db=null;foreach(glob($dir.'/*') as $file)if(is_file($file))unlink($file);rmdir($dir);}
-
