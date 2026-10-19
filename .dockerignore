@@ -10,3 +10,5 @@ README.md
 RENDER.md
 verify-print.cjs
 verify-deploy.php
+verify-activity.php
+render-*.png

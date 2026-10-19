@@ -18,6 +18,7 @@ Admins can create staff/admin accounts, edit inventory, export CSV files, delete
 ## Features
 
 - Dashboard with appointment schedule, revenue collected, patient count, and low-stock alerts
+- Admin-only Activity logs with sign-ins, failed sign-ins, logouts, account creation, and record creation/update/deletion; searchable and paginated. Logs begin after this feature is deployed and share the SQLite database's storage lifecycle.
 - Owner directory and patient profiles with consultation, appointment, and vaccine histories
 - Appointment scheduling and status tracking
 - Consultation diagnoses, treatments, and notes
