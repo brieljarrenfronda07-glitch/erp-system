@@ -25,6 +25,7 @@ Admins can create staff/admin accounts, edit inventory, export CSV files, delete
 - Vaccination dates and booster due dates
 - Inventory quantities, reorder thresholds, expiry dates, and unit prices
 - Simple invoice records, amounts, and paid/unpaid status
+- Billing links each invoice to an owner and their pet, with multiple service rows, quantities, unit prices, automatic totals, partial payments, and printable itemized statements.
 - Admin account creation; role restrictions enforced on the server
 - CSV exports, responsive layouts, form validation, CSRF protection, prepared queries, and password hashing
 

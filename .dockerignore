@@ -11,4 +11,5 @@ RENDER.md
 verify-print.cjs
 verify-deploy.php
 verify-activity.php
+verify-billing.cjs
 render-*.png

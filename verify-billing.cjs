@@ -1,0 +1,14 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const dialog={innerHTML:'',classList:{add(){},remove(){}},showModal(){}};
+const ctx=vm.createContext({document:{querySelector(){return dialog;}}});
+vm.runInContext(fs.readFileSync('app.js','utf8').replace(/boot\(\);\s*$/,''),ctx);
+vm.runInContext(fs.readFileSync('printing.js','utf8'),ctx);
+vm.runInContext(fs.readFileSync('billing.js','utf8'),ctx);
+const total=vm.runInContext(`billTotals([{service:'Consultation',quantity:1,price:500},{service:'Deworming',quantity:2,price:125.25}],100,300)`,ctx);
+assert.equal(total.subtotal,75050);assert.equal(total.total,85050);assert.equal(total.balance,55050);
+assert.equal(vm.runInContext(`invoiceItems({description:'Legacy visit',amount:'100',takehome:'20'})[0].price`,ctx),80);
+assert.equal(vm.runInContext(`invoiceItems({line_items:JSON.stringify([{service:'Grooming',quantity:2,price:250}])})[0].quantity`,ctx),2);
+vm.runInContext(`state={records:[{id:1,type:'owners',data:{name:'Owner Name'}},{id:2,type:'patients',data:{name:'Pet Name',owner:'1'}},{id:3,type:'invoices',data:{patient:'2',owner:'1',charges:'Consultation (1 × 500.00) | 500.00\\nDeworming (2 × 125.25) | 250.50',takehome:'100',initial:'300',amount:'850.50'}}]};printRecord('invoices',3);`,ctx);
+for(const text of ['Owner Name','Pet Name','Consultation','Deworming','₱850.50','₱550.50'])assert.ok(dialog.innerHTML.includes(text),text);
+assert.ok(!dialog.innerHTML.includes('blank-charge'),'Only actual services printed');
+console.log('Passed: quantity/price totals, medicine charges, payment and balance, legacy invoice loading, linked owner/pet names, clear printed services.');

@@ -71,7 +71,7 @@ if($action==='user') {
 $schemas=['owners'=>['name','email','phone','address'],'patients'=>['name','species','breed','owner','sex','birthday','weight','service','status','notes'],'appointments'=>['patient','date','time','service','vet','status','notes'],'consultations'=>['patient','date','vet','diagnosis','treatment','notes'],'vaccinations'=>['patient','vaccine','date','due','notes'],'inventory'=>['name','category','stock','minimum','price','expiry'],'invoices'=>['owner','description','amount','status','date']];
 $schemas['patients']=array_merge($schemas['patients'],['color','temperature','registration_date']);
 $schemas['consultations']=array_merge($schemas['consultations'],['diet','recheck','license','ptr','s2']);
-$schemas['invoices']=array_merge($schemas['invoices'],['patient','admitted','diagnosis','charges','takehome','initial','prepared']);
+$schemas['invoices']=array_merge($schemas['invoices'],['patient','admitted','diagnosis','charges','takehome','initial','prepared','line_items']);
 $schemas['diagnostics']=['patient','date','tested','kit','lot','results','vet','license','ptr','s2'];
 $type=$input['type']??'';if(!isset($schemas[$type])) respond(['error'=>'Invalid record type.'],422);
 if($type==='inventory'&&$user['role']!=='admin') respond(['error'=>'Only administrators can change inventory. Staff can view stock availability.'],403);
@@ -97,6 +97,22 @@ if($type==='invoices' && $data['patient']!=='') {$q=$db->prepare('SELECT data FR
 if($type==='invoices' && $data['charges']!=='') {
  $total=0;foreach(preg_split('/\R/',$data['charges']) as $line){if(trim($line)==='')continue;$parts=explode('|',$line);$charge=trim(array_pop($parts));if(!$parts||!is_numeric($charge)||(float)$charge<0) respond(['error'=>'Use one charge per line: Description | Amount.'],422);$total+=(float)$charge;}
  $data['amount']=(string)round($total+(float)($data['takehome']?:0),2);
+}
+if($type==='invoices' && $data['line_items']!=='') {
+ if($data['patient']==='')respond(['error'=>'Select the pet receiving these services.'],422);
+ $items=json_decode($data['line_items'],true);
+ if(!is_array($items)||!array_is_list($items)||count($items)<1||count($items)>100)respond(['error'=>'Add between 1 and 100 services.'],422);
+ $subtotal=0;$lines=[];$normalized=[];
+ foreach($items as $item){
+  $name=is_array($item)&&is_string($item['service']??null)?trim($item['service']):'';
+  $qty=$item['quantity']??null;$price=$item['price']??null;
+  if($name===''||strlen($name)>200||str_contains($name,'|')||str_contains($name,"\n")||str_contains($name,"\r")||!is_numeric($qty)||(float)$qty!==(float)(int)$qty||(int)$qty<1||(int)$qty>10000||!is_numeric($price)||!is_finite((float)$price)||(float)$price<0||(float)$price>10000000)respond(['error'=>'Each service needs a name, a whole quantity from 1–10000, and a valid nonnegative price.'],422);
+  $unit=(int)round((float)$price*100);$cents=$unit*(int)$qty;$subtotal+=$cents;$normalized[]=['service'=>$name,'quantity'=>(int)$qty,'price'=>$unit/100];
+  $lines[]=$name.' ('.(int)$qty.' × '.number_format($unit/100,2,'.','').') | '.number_format($cents/100,2,'.','');
+ }
+ $total=$subtotal+(int)round((float)($data['takehome']?:0)*100);$payment=(int)round((float)($data['initial']?:0)*100);
+ if($payment>$total)respond(['error'=>'Payment cannot exceed the invoice total.'],422);
+ $data['amount']=number_format($total/100,2,'.','');$data['initial']=number_format($payment/100,2,'.','');$data['line_items']=json_encode($normalized);$data['charges']=implode("\n",$lines);$data['description']=implode(', ',array_column($normalized,'service'));$data['status']=$payment>=$total?'Paid':($payment>0?'Partially paid':'Unpaid');
 }
 $db->beginTransaction();$event=$id?'Updated':'Created';
 if($id){$q=$db->prepare('UPDATE records SET data=? WHERE id=? AND type=?');$q->execute([json_encode($data),$id,$type]);}else{$q=$db->prepare('INSERT INTO records(type,data) VALUES(?,?)');$q->execute([$type,json_encode($data)]);$id=(int)$db->lastInsertId();}activity($db,$user,$event,$type,$id,$event.' record #'.$id);$db->commit();respond(['ok'=>true]);
