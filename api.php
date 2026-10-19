@@ -82,11 +82,13 @@ if($action==='user') {
 $schemas=['owners'=>['name','email','phone','address'],'patients'=>['name','species','breed','owner','sex','birthday','weight','service','status','notes'],'appointments'=>['patient','date','time','service','vet','status','notes'],'consultations'=>['patient','date','vet','diagnosis','treatment','notes'],'vaccinations'=>['patient','vaccine','date','due','notes'],'inventory'=>['name','category','stock','minimum','price','expiry'],'invoices'=>['owner','description','amount','status','date']];
 $schemas['patients']=array_merge($schemas['patients'],['color','temperature','registration_date']);
 $schemas['appointments'][]='services';
+$schemas['appointments']=array_merge($schemas['appointments'],['performed_services','weight','temperature']);
 $schemas['consultations']=array_merge($schemas['consultations'],['diet','recheck','license','ptr','s2']);
 $schemas['consultations']=array_merge($schemas['consultations'],['medicines','appointment']);
 $schemas['invoices']=array_merge($schemas['invoices'],['patient','admitted','diagnosis','charges','takehome','initial','prepared','line_items','appointment']);
 $schemas['invoices'][]='prescriptions';
 $schemas['diagnostics']=['patient','date','tested','kit','lot','results','vet','license','ptr','s2'];
+$schemas['diagnostics'][]='appointment';$schemas['vaccinations'][]='appointment';
 $type=$input['type']??'';if(!isset($schemas[$type])) respond(['error'=>'Invalid record type.'],422);
 if($user['role']==='doctor'&&(!in_array($type,['patients','appointments','consultations','vaccinations','diagnostics'],true)||($type==='patients'&&empty($input['id']))))respond(['error'=>'Doctor access is limited to patient updates, appointments, and clinical care records.'],403);
 if($type==='inventory'&&$user['role']!=='admin') respond(['error'=>'Only administrators can change inventory. Staff can view stock availability.'],403);
@@ -96,12 +98,31 @@ if($action==='delete') {
  if($user['role']!=='admin') respond(['error'=>'Only administrators can delete records.'],403);
  if($type==='consultations'){$q=$db->prepare('SELECT COUNT(*) FROM prescription_invoices WHERE consultation_id=?');$q->execute([$id]);if($q->fetchColumn())respond(['error'=>'This prescription is linked to an invoice. Remove the invoice first.'],409);}
  if($type==='appointments'){$q=$db->prepare('SELECT COUNT(*) FROM invoice_visits WHERE appointment_id=?');$q->execute([$id]);if($q->fetchColumn())respond(['error'=>'This visit has an invoice. Remove the invoice first.'],409);}
+ if($type==='appointments'){foreach($db->query("SELECT data FROM records WHERE type IN ('consultations','diagnostics','vaccinations')") as $clinical){$linked=json_decode($clinical['data'],true);if(($linked['appointment']??'')==(string)$id)respond(['error'=>'This visit has clinical records. Keep the visit or remove linked records first.'],409);}}
  foreach($db->query('SELECT type,data FROM records') as $r){$d=json_decode($r['data'],true);if(($type==='owners' && in_array($r['type'],['patients','invoices']) && ($d['owner']??'')==(string)$id)||($type==='patients' && in_array($r['type'],['appointments','consultations','vaccinations','diagnostics','invoices'])&&($d['patient']??'')==(string)$id)) respond(['error'=>'This record is linked to other records. Remove those first.'],409);}
  $db->beginTransaction();$q=$db->prepare('DELETE FROM records WHERE id=? AND type=?');$q->execute([$id,$type]);activity($db,$user,'Deleted',$type,$id,'Deleted record #'.$id);$db->commit();respond(['ok'=>true]);
 }
 if($action!=='save') respond(['error'=>'Unknown action'],404);
 $data=[];foreach($schemas[$type] as $key) {$v=$input['data'][$key]??'';if(!is_scalar($v)||strlen((string)$v)>10000) respond(['error'=>'Invalid field value.'],422);$data[$key]=trim((string)$v);}
 if($user['role']==='doctor'&&in_array($type,['consultations','diagnostics'],true))$data['vet']=$user['name'];
+if(in_array($type,['consultations','diagnostics','vaccinations'],true)&&$data['appointment']!==''){
+ $q=$db->prepare('SELECT data FROM records WHERE id=? AND type=?');$q->execute([$data['appointment'],'appointments']);$linked=json_decode($q->fetchColumn()?:'null',true);
+ if(!$linked||($linked['patient']??'')!==$data['patient'])respond(['error'=>'Clinical records must use the patient from the linked visit.'],422);
+ if(($linked['status']??'')==='Cancelled')respond(['error'=>'Clinical records cannot be added to a cancelled visit.'],422);
+}
+if($type==='appointments'&&$data['performed_services']!==''){
+ $performed=json_decode($data['performed_services'],true);if(!is_array($performed)||!array_is_list($performed)||count($performed)>20)respond(['error'=>'Invalid completed service list.'],422);
+ foreach($performed as $name)if(!is_string($name)||trim($name)===''||strlen($name)>200||str_contains($name,'|')||preg_match('/[\r\n]/',$name))respond(['error'=>'Invalid completed service.'],422);
+ $data['performed_services']=json_encode(array_values(array_unique(array_map('trim',$performed))));
+}
+if($type==='appointments'&&$id){
+ $q=$db->prepare('SELECT data FROM records WHERE id=?');$q->execute([$id]);$prior=json_decode($q->fetchColumn()?:'{}',true);
+ if(($prior['patient']??'')!==$data['patient']){
+  $q=$db->prepare('SELECT COUNT(*) FROM invoice_visits WHERE appointment_id=?');$q->execute([$id]);$linked=(int)$q->fetchColumn();
+  foreach($db->query("SELECT data FROM records WHERE type IN ('consultations','diagnostics','vaccinations')") as $row){$clinical=json_decode($row['data'],true);if(($clinical['appointment']??'')==(string)$id)$linked++;}
+  if($linked)respond(['error'=>'This visit has care or billing records and cannot be reassigned to another pet.'],409);
+ }
+}
 if($type==='consultations'){
  $previous=[];if($id){$q=$db->prepare('SELECT data FROM records WHERE id=?');$q->execute([$id]);$previous=json_decode($q->fetchColumn()?:'{}',true);}
  if($user['role']==='staff'){
@@ -133,6 +154,8 @@ if($type==='invoices' && $data['appointment']!==''){
  $q=$db->prepare('SELECT data FROM records WHERE id=? AND type=?');$q->execute([$data['appointment'],'appointments']);$visit=json_decode($q->fetchColumn()?:'null',true);
  if(!$visit||($visit['patient']??'')!==$data['patient'])respond(['error'=>'The invoice must use the patient from the linked visit.'],422);
  if(($visit['status']??'')==='Cancelled')respond(['error'=>'Cancelled visits cannot be billed.'],422);
+ $performed=json_decode($visit['performed_services']??'null',true);
+ if((is_array($performed)&&!count($performed))||(!is_array($performed)&&($visit['status']??'')!=='Completed'))respond(['error'=>'Record the services performed before billing this visit.'],422);
  $q=$db->prepare('SELECT invoice_id FROM invoice_visits WHERE appointment_id=?');$q->execute([$data['appointment']]);$existingInvoice=$q->fetchColumn();if($existingInvoice&&(int)$existingInvoice!==$id)respond(['error'=>'This visit already has an invoice. Open its existing bill.'],409);
 }
 if($type==='invoices'){

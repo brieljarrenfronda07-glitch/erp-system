@@ -15,4 +15,5 @@ verify-billing.cjs
 verify-doctor.cjs
 verify-prescriptions.cjs
 verify-reporting.php
+verify-visits.cjs
 render-*.png

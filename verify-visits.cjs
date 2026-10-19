@@ -1,0 +1,12 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const dialog={innerHTML:'',open:false,classList:{add(){},remove(){}},showModal(){this.open=true},close(){this.open=false}};
+const ctx=vm.createContext({document:{querySelector(){return dialog;}},console});
+vm.runInContext(fs.readFileSync('app.js','utf8').replace(/boot\(\);\s*$/,''),ctx);
+for(const file of ['printing.js','permissions.js','activity.js','billing.js','workflow.js','doctor.js','prescriptions.js','reports.js','visits.js'])vm.runInContext(fs.readFileSync(file,'utf8'),ctx);
+vm.runInContext(`state={user:{role:'staff'},records:[{id:1,type:'owners',data:{name:'Owner',phone:'123'}},{id:2,type:'patients',data:{name:'Pet',owner:'1',species:'Cat'}},{id:3,type:'appointments',data:{patient:'2',date:'2026-10-19',services:'["Consultation","Vaccination"]',service:'Consultation, Vaccination',performed_services:'["Consultation"]',status:'Waiting'}},{id:4,type:'consultations',data:{patient:'2',appointment:'3',medicines:'[{"name":"Test medicine","quantity":5,"instructions":"Directions"}]'}}]};`,ctx);
+const draft=vm.runInContext('visitBillDraft(3)',ctx),items=JSON.parse(draft.line_items);
+assert.ok(items.some(item=>item.service==='Consultation'));assert.ok(!items.some(item=>item.service==='Vaccination'));assert.ok(items.some(item=>item.service==='Medicine: Test medicine'&&item.quantity===5));
+assert.equal(vm.runInContext('visitReady(3)',ctx),true);assert.equal(vm.runInContext(`visitRecords(3,'consultations').length`,ctx),1);
+vm.runInContext(`printVisitIntake(3)`,ctx);assert.ok(dialog.innerHTML.includes('Owner'));assert.ok(dialog.innerHTML.includes('Pet'));assert.ok(dialog.innerHTML.includes('Consultation'));assert.ok(dialog.innerHTML.includes('Vaccination'));assert.ok(dialog.innerHTML.includes('service-box'));
+vm.runInContext(`state.records.find(r=>r.id===3).data.performed_services='[]'`,ctx);assert.throws(()=>vm.runInContext('visitBillDraft(3)',ctx),/performed/);
+console.log('Passed: one-visit care linkage, completed-service billing, prescription carryover, visit readiness, intake printing, empty performed-service rejection.');
