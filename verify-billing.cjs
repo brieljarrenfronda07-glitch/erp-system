@@ -22,3 +22,7 @@ assert.throws(()=>vm.runInContext('visitBillDraft(4)',ctx),/Cancelled/);
 assert.throws(()=>vm.runInContext('visitBillDraft(999)',ctx),/not found/);
 console.log('Passed: quantity/price totals, medicine charges, payment and balance, legacy invoice loading, linked owner/pet names, clear printed services.');
 console.log('Passed: visit-to-billing owner/pet/service prefill, no assumed service price, cancelled/missing visit rejection.');
+const guide=vm.runInContext(`statementCharges({line_items:JSON.stringify([{service:'Consultation',quantity:1,price:500,category:'Professional Fee'},{service:'Medicine: Test',quantity:10,price:30,category:'Oral Medicines'},{service:'Take-home bottle',quantity:1,price:100,category:'Take Home Medicines'}]),takehome:'50'})`,ctx);
+assert.equal(guide.total,95000);assert.equal(guide.main,80000);assert.equal(guide.takehome,15000);assert.equal(guide.withoutMedicines,50000);
+for(const category of ['Confinement / Admission / Boarding Fee','Injectable Medicines','Oral Medicines','Rapid Test Kit','Professional Fee','Take Home Medicines'])assert.ok(dialog.innerHTML.includes(category),category);
+console.log('Passed: uploaded billing-statement categories, medicine separation, take-home totals, and totals excluding medicines.');

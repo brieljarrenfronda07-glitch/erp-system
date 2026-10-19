@@ -27,5 +27,6 @@ try{
  $doctor=requestAudit($dir,3,['action'=>'bootstrap']);checkAudit($doctor['user']['role']==='doctor'&&$doctor['users']===[],'Doctor session recognized');
  foreach($doctor['records'] as $record){checkAudit($record['type']!=='invoices','Doctor cannot receive invoices');if($record['type']==='inventory')checkAudit(!isset($record['data']['price']),'Doctor cannot receive inventory prices');}
  $doctorLogs=requestAudit($dir,3,['action'=>'logs']);checkAudit(isset($doctorLogs['error'])&&!isset($doctorLogs['logs']),'Doctor cannot retrieve activity logs');
+ foreach([2,3] as $uid){$restricted=requestAudit($dir,$uid,['action'=>'reports']);checkAudit(isset($restricted['error'])&&!isset($restricted['services']),'Income report restricted to admin');}
  echo "Passed: admin log access, staff and invalid-session denial, search, action filters, newest-first order, pagination, bootstrap privacy.\n";
 }finally{$q=null;$db=null;foreach(glob($dir.'/*') as $file)if(is_file($file))unlink($file);rmdir($dir);}

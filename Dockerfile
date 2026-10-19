@@ -15,6 +15,7 @@ COPY billing.js ./
 COPY workflow.js ./
 COPY doctor.js ./
 COPY prescriptions.js ./
+COPY reports.js reporting.php ./
 COPY assets/ ./assets/
 COPY deploy/start.sh /usr/local/bin/petcare-start
 RUN sed -i 's/\r$//' /usr/local/bin/petcare-start \

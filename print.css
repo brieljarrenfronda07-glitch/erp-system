@@ -13,3 +13,4 @@
 @page{size:A4 portrait;margin:9mm 7mm}
 @media print{html,body{height:auto!important;overflow:visible!important}#modal.print-preview{transform:none!important;border-radius:0!important}#print-document{overflow:visible;padding:0}.paper{width:100%;min-height:277mm;padding:4mm;display:block}.paper .identity,.paper .letterhead{break-inside:avoid}.rx-body{min-height:135mm}.signatory{margin-left:auto}.results+.signatory{margin:22mm auto 0;padding:0}.patient-paper{min-height:140mm}.clinic-watermark{opacity:.075}.paper,.paper *{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
 .letterhead-logo{background:transparent!important;border:0!important;box-shadow:none!important;clip-path:circle(49% at 50% 50%)}
+.statement-item{font-weight:400;font-size:10px;line-height:1.35;padding:2px 0 0 8px}.billing-paper .takehome-table td:first-child{width:71%}.billing-paper .print-table th{font-weight:bold}

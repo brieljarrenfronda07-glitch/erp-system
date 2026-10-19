@@ -65,6 +65,14 @@ if($action==='bootstrap') {
  if($user['role']==='doctor')$records=array_values(array_filter($records,fn($r)=>$r['type']!=='invoices'));
  respond(['user'=>$user,'csrf'=>$_SESSION['csrf'],'records'=>$records,'users'=>$user['role']==='admin'?$db->query('SELECT id,name,email,role FROM users')->fetchAll(PDO::FETCH_ASSOC):[]]);
 }
+if($action==='reports'){
+ if($user['role']!=='admin')respond(['error'=>'Only administrators can view income reports.'],403);
+ if($_SERVER['REQUEST_METHOD']!=='GET')respond(['error'=>'Method not allowed'],405);
+ $from=(string)($_GET['from']??date('Y-m-01'));$to=(string)($_GET['to']??date('Y-m-d'));
+ foreach([$from,$to] as $date){$parsed=DateTimeImmutable::createFromFormat('!Y-m-d',$date);if(!$parsed||$parsed->format('Y-m-d')!==$date)respond(['error'=>'Use valid report dates.'],422);}
+ if($from>$to)respond(['error'=>'The start date must be before the end date.'],422);
+ require_once __DIR__.'/reporting.php';respond(serviceIncomeReport($db->query("SELECT id,type,data FROM records WHERE type='invoices'")->fetchAll(PDO::FETCH_ASSOC),$from,$to));
+}
 if($_SERVER['REQUEST_METHOD']!=='POST') respond(['error'=>'Method not allowed'],405);
 if($action==='user') {
  if($user['role']!=='admin') respond(['error'=>'Administrator access required.'],403);
@@ -147,7 +155,10 @@ if($type==='invoices' && $data['line_items']!=='') {
   $name=is_array($item)&&is_string($item['service']??null)?trim($item['service']):'';
   $qty=$item['quantity']??null;$price=$item['price']??null;
   if($name===''||strlen($name)>200||str_contains($name,'|')||str_contains($name,"\n")||str_contains($name,"\r")||!is_numeric($qty)||(float)$qty!==(float)(int)$qty||(int)$qty<1||(int)$qty>10000||!is_numeric($price)||!is_finite((float)$price)||(float)$price<0||(float)$price>10000000)respond(['error'=>'Each service needs a name, a whole quantity from 1–10000, and a valid nonnegative price.'],422);
-  $unit=(int)round((float)$price*100);$cents=$unit*(int)$qty;$subtotal+=$cents;$normalized[]=['service'=>$name,'quantity'=>(int)$qty,'price'=>$unit/100];
+  $category=$item['category']??'';
+  $categories=['Confinement / Admission / Boarding Fee','Injectable Medicines','Oral Medicines','Emergency Fee','Surgery Fee','Anesthesia','Supplies (syringe, underpad, bowl, cannula)','IV insertion (cannula / IV Set)','Pet Food','CBC/Plt','Serum Chemistry Test','Rapid Test Kit','Fecalysis','Earmites Test','Ultrasound','Urine Analysis','Veterinary Nursing Services','Professional Fee','Take Home Medicines','Other Services'];
+  if(!is_string($category)||($category!==''&&!in_array($category,$categories,true)))respond(['error'=>'Select a valid billing category.'],422);
+  $unit=(int)round((float)$price*100);$cents=$unit*(int)$qty;$subtotal+=$cents;$normalized[]=['service'=>$name,'quantity'=>(int)$qty,'price'=>$unit/100,'category'=>$category];
   $lines[]=$name.' ('.(int)$qty.' × '.number_format($unit/100,2,'.','').') | '.number_format($cents/100,2,'.','');
  }
  $total=$subtotal+(int)round((float)($data['takehome']?:0)*100);$payment=(int)round((float)($data['initial']?:0)*100);
