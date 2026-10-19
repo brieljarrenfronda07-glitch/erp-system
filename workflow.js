@@ -38,7 +38,7 @@ function startPatientCare(type,id){
  $('#modal').close();openForm(type);
  const form=document.querySelector(type==='invoices'?'#invoice-form':'#record-form');if(!form)return;
  if(type==='invoices'&&form.elements.owner){form.elements.owner.value=String(pet.data.owner);form.elements.owner.dispatchEvent(new Event('change'));}
- if(form.elements.patient)form.elements.patient.value=String(id);
+ if(form.elements.patient){form.elements.patient.value=String(id);form.elements.patient.dispatchEvent(new Event('change'));}
 }
 function visitBillDraft(id){
  const visit=state.records.find(r=>r.type==='appointments'&&r.id===id);if(!visit)throw Error('Visit not found.');
@@ -60,3 +60,4 @@ drawTable=function(){
   const button=document.createElement('button');button.textContent=rows('invoices').some(r=>r.data.appointment==id)?'View bill':'Create bill';button.onclick=()=>billVisit(id);row.querySelector('.actions').append(button);
  });
 };
+
