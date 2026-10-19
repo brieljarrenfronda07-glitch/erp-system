@@ -9,6 +9,7 @@ COPY deploy/php.ini /usr/local/etc/php/conf.d/petcare.ini
 RUN a2enconf petcare
 COPY index.php api.php health.php ./
 COPY app.js printing.js style.css print.css ./
+COPY permissions.js ./
 COPY assets/ ./assets/
 COPY deploy/start.sh /usr/local/bin/petcare-start
 RUN sed -i 's/\r$//' /usr/local/bin/petcare-start \

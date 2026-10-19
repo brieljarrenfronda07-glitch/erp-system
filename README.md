@@ -13,7 +13,7 @@ The SQLite database is created automatically in `data/` on the first request. PH
 - Admin: `admin@pawcare.local` / `Admin123!`
 - Staff: `staff@pawcare.local` / `Staff123!`
 
-Admin can create accounts and delete records. Both roles can view, add, edit, search, and export clinic records. Linked owners and patients cannot be deleted while dependent records exist.
+Admins can create staff/admin accounts, edit inventory, export CSV files, delete records, and view the revenue overview. Staff manage daily patient care, appointments, medical records, vaccinations, diagnostic reports, and billing. Staff can view stock availability but cannot edit inventory or see inventory unit prices. Linked owners and patients cannot be deleted while dependent records exist.
 
 ## Features
 

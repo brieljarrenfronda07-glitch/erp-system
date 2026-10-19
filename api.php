@@ -43,7 +43,7 @@ if(!isset($_SESSION['uid'])) respond(['error'=>'Please sign in.'],401);
 $q=$db->prepare('SELECT id,name,email,role FROM users WHERE id=?');$q->execute([$_SESSION['uid']]);$user=$q->fetch(PDO::FETCH_ASSOC);if(!$user) respond(['error'=>'Please sign in.'],401);
 if($action==='logout'){session_destroy();respond(['ok'=>true]);}
 if($action==='bootstrap') {
- $records=$db->query('SELECT * FROM records ORDER BY id DESC')->fetchAll(PDO::FETCH_ASSOC);foreach($records as &$r) $r['data']=json_decode($r['data'],true);unset($r);
+ $records=$db->query('SELECT * FROM records ORDER BY id DESC')->fetchAll(PDO::FETCH_ASSOC);foreach($records as &$r) {$r['data']=json_decode($r['data'],true);if($user['role']!=='admin'&&$r['type']==='inventory')unset($r['data']['price']);}unset($r);
  respond(['user'=>$user,'csrf'=>$_SESSION['csrf'],'records'=>$records,'users'=>$user['role']==='admin'?$db->query('SELECT id,name,email,role FROM users')->fetchAll(PDO::FETCH_ASSOC):[]]);
 }
 if($_SERVER['REQUEST_METHOD']!=='POST') respond(['error'=>'Method not allowed'],405);
@@ -58,6 +58,7 @@ $schemas['consultations']=array_merge($schemas['consultations'],['diet','recheck
 $schemas['invoices']=array_merge($schemas['invoices'],['patient','admitted','diagnosis','charges','takehome','initial','prepared']);
 $schemas['diagnostics']=['patient','date','tested','kit','lot','results','vet','license','ptr','s2'];
 $type=$input['type']??'';if(!isset($schemas[$type])) respond(['error'=>'Invalid record type.'],422);
+if($type==='inventory'&&$user['role']!=='admin') respond(['error'=>'Only administrators can change inventory. Staff can view stock availability.'],403);
 $id=(int)($input['id']??0);
 if($action==='delete') {
  if($user['role']!=='admin') respond(['error'=>'Only administrators can delete records.'],403);
@@ -82,4 +83,3 @@ if($type==='invoices' && $data['charges']!=='') {
 }
 if($id){$q=$db->prepare('UPDATE records SET data=? WHERE id=? AND type=?');$q->execute([json_encode($data),$id,$type]);}else{$q=$db->prepare('INSERT INTO records(type,data) VALUES(?,?)');$q->execute([$type,json_encode($data)]);}respond(['ok'=>true]);
 } catch(PDOException $e){respond(['error'=>str_contains($e->getMessage(),'UNIQUE')?'That email is already registered.':'Database operation failed.'],409);}catch(Throwable $e){respond(['error'=>'Unable to process this request.'],500);}
-
