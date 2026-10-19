@@ -19,6 +19,7 @@ Admins can create staff/admin accounts, edit inventory, export CSV files, delete
 
 - Dashboard with appointment schedule, revenue collected, patient count, and low-stock alerts
 - Workflow: register owner and pet once → book a visit and requested service → document completed care in consultation/vaccine history → bill actual services. Patient profiles offer shortcuts with the owner and pet prefilled. Registration no longer requires a service.
+- Appointments provide **Save & continue to billing** and **Create bill** actions. The owner, pet, service, and visit reference carry over. Staff confirm actual services and prices before saving. Each visit can link to one invoice; an existing bill is reopened instead of duplicated.
 - Admin-only Activity logs with sign-ins, failed sign-ins, logouts, account creation, and record creation/update/deletion; searchable and paginated. Logs begin after this feature is deployed and share the SQLite database's storage lifecycle.
 - Owner directory and patient profiles with consultation, appointment, and vaccine histories
 - Appointment scheduling and status tracking
